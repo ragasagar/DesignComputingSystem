@@ -93,8 +93,40 @@ void *matchmaker(void *data)
 }
 void mating_occur()
 {
+    int children_to_born, num_mate;
+    int i;
+    pthread_t *children_thread;
     while(1){
-        
+        children_to_born = 1;
+        num_mate=0;
+
+        pthread_mutex_lock(&mating_mutex);
+        while(num_females == 0 || num_males == 0 || num_matchmakers == 0){
+            pthread_cond_wait(&mating_wait, &mating_mutex);
+        }
+
+        mating_occur(num_childern);
+
+        children_to_born = (rand() % (num_childern)) + 1;
+        num_mate = (rand() % (children_to_born + 1)) + 1;
+        children_thread = (pthread_t *)malloc(sizeof(pthread_t) * children_to_born);
+        for(i = 0; i< num_mate ; i++){
+            switch (rand()%2)
+            {
+            case 0:
+                pthread_create(&children_thread[i], NULL, male, NULL);
+                break;
+            
+            default:
+                pthread_create(&children_thread[i], NULL, female, NULL);
+                break;
+            }
+        }
+        for(i=num_mate; i< children_to_born; i++){
+            pthread_create(&children_thread[i], NULL, matchmaker, NULL);
+        }
+
+
     }
 }
 int main(int argc, char *argv[])
