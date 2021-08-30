@@ -36,7 +36,7 @@ void *generate_requests_loop(void *data)
   {
     sem_wait(&empty);
     sem_wait(&mutex);
-    if (item_to_produce == total_items)
+    if (item_to_produce >= total_items)
     {
       sem_post(&mutex);
       sem_post(&full);
@@ -63,9 +63,10 @@ void *consume_requests_loop(void *data)
 
     sem_wait(&full);
     sem_wait(&mutex);
-    if (item_to_consume == total_items)
+    if (item_to_consume >= total_items)
     {
       sem_post(&mutex);
+      sem_post(&empty);
       break;
     }
     print_consumed(buffer[out], thread_id);
