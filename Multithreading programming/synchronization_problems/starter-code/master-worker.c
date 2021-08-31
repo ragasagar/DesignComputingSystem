@@ -36,7 +36,7 @@ void *generate_requests_loop(void *data)
   {
     sem_wait(&empty);
     sem_wait(&mutex);
-    if (item_to_produce >= total_items)
+    if (item_to_produce == total_items)
     {
       sem_post(&mutex);
       sem_post(&full);
@@ -46,6 +46,12 @@ void *generate_requests_loop(void *data)
     in = (in + 1) % max_buf_size;
     print_produced(item_to_produce, thread_id);
     item_to_produce++;
+    if (item_to_produce == total_items)
+    {
+      sem_post(&mutex);
+      sem_post(&full);
+      break;
+    }
     sem_post(&mutex);
     sem_post(&full);
   }
@@ -63,15 +69,23 @@ void *consume_requests_loop(void *data)
 
     sem_wait(&full);
     sem_wait(&mutex);
-    if (item_to_consume >= total_items)
+    if (item_to_consume == total_items)
     {
       sem_post(&mutex);
+      sem_post(&full);
       sem_post(&empty);
       break;
     }
     print_consumed(buffer[out], thread_id);
     out = (out + 1) % max_buf_size;
     item_to_consume++;
+    if (item_to_consume == total_items)
+    {
+      sem_post(&mutex);
+      sem_post(&full);
+      sem_post(&empty);
+      break;
+    }
     sem_post(&mutex);
     sem_post(&empty);
   }

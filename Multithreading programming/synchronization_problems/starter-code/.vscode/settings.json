@@ -3,6 +3,9 @@
         "stdio.h": "c",
         "pthread.h": "c",
         "signal.h": "c",
-        "semaphore.h": "c"
+        "semaphore.h": "c",
+        "string.h": "c",
+        "errno.h": "c",
+        "type_traits": "c"
     }
 }
