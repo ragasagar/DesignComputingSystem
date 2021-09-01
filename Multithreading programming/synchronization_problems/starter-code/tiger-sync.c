@@ -12,10 +12,11 @@
 #define FEMALE 1
 #define MATCHMAKER 2
 
-int num_females, num_males, num_matchmakers, num_children, num_tigers, count_tiger = 0;
-int mating_begin;
-pthread_mutex_t male_mutex, female_mutex, matchmaker_mutex, mating_mutex, born_mutex;
-pthread_cond_t mating_wait;
+int count_tiger, need_female = 0, need_male = 0, need_matchmaker = 0;
+int num_females, num_males, num_matchmakers, num_tigers, num_children;
+int count = 0;
+pthread_mutex_t mating_lock;
+pthread_cond_t male_wait, female_wait, matchmaker_wait, male_exit, female_exit, match_exit, mating_start;
 void print_born(int tiger_type)
 {
     char *gender, *type;
@@ -34,7 +35,7 @@ void print_born(int tiger_type)
 
 void print_mating_begin(int num)
 {
-    printf("\nMating begins with {%d} children to be born\n", num);
+    printf("Mating begins with {%d} children to be born\n", num);
 }
 
 void print_tiger_leave(int gen)
@@ -49,97 +50,139 @@ void print_tiger_leave(int gen)
         break;
     }
 }
-
+void tiger_stats()
+{
+    printf("Total tiger: %d, male: %d, female: %d, matchmaker: %d\n", count_tiger, num_males, num_females, num_matchmakers);
+}
 void *male(void *data)
 {
-    pthread_mutex_lock(&male_mutex);
-    num_males++;
-    print_born(0);
-    pthread_cond_signal(&mating_wait);
-    pthread_mutex_unlock(&male_mutex);
+    int thread_id = *((int *)data);
+    pthread_mutex_lock(&mating_lock);
+    pthread_cond_wait(&male_wait, &mating_lock);
+    need_male = 1;
+    count++;
+    pthread_cond_signal(&mating_start);
+    pthread_cond_wait(&male_exit, &mating_lock);
+    need_male = 0;
+    print_tiger_leave(thread_id);
+    pthread_mutex_unlock(&mating_lock);
     return 0;
 }
 void *female(void *data)
 {
-    pthread_mutex_lock(&female_mutex);
-    num_females++;
-    print_born(1);
-    pthread_cond_signal(&mating_wait);
-    pthread_mutex_unlock(&female_mutex);
+    int thread_id = *((int *)data);
+    pthread_mutex_lock(&mating_lock);
+    pthread_cond_wait(&female_wait, &mating_lock);
+    need_female = 1;
+    count++;
+    pthread_cond_signal(&mating_start);
+    pthread_cond_wait(&female_exit, &mating_lock);
+    need_female = 0;
+    print_tiger_leave(thread_id);
+    pthread_mutex_unlock(&mating_lock);
     return 0;
 }
 void *matchmaker(void *data)
 {
-    pthread_mutex_lock(&matchmaker_mutex);
-    num_matchmakers++;
-    print_born(2);
-    pthread_cond_signal(&mating_wait);
-    pthread_mutex_unlock(&matchmaker_mutex);
+
+    pthread_mutex_lock(&mating_lock);
+    pthread_cond_wait(&matchmaker_wait, &mating_lock);
+    need_matchmaker = 1;
+    count++;
+    pthread_cond_signal(&mating_start);
+    pthread_cond_wait(&match_exit, &mating_lock);
+    need_matchmaker = 0;
+    pthread_mutex_unlock(&mating_lock);
     return 0;
 }
-void mating_occur(int children_to_born)
+
+void *mating_occur(void *data)
 {
-    int i;
     pthread_t *children_thread;
     int *children_thread_id;
-    mating_begin = 1;
-    int value = 1;
-
-    print_mating_begin(children_to_born);
-
-    children_thread = (pthread_t *)malloc(sizeof(pthread_t) * children_to_born);
-    children_thread_id = (int *)malloc(sizeof(int) * children_to_born);
-
-    for (i = 0; i < children_to_born; i++)
+    int value;
+    int i, children_to_born = 1;
+    while (1)
     {
-
-        count_tiger++;
-        if (count_tiger == num_tigers)
+        if (count_tiger >= num_tigers)
         {
+            // tiger_stats();
             break;
         }
-        value = rand() % (3) + 0;
+        pthread_mutex_lock(&mating_lock);
+        pthread_cond_signal(&male_wait);
+        pthread_cond_signal(&female_wait);
+        pthread_cond_signal(&matchmaker_wait);
 
-        switch (value)
+        while (count < 3)
+        {   if(num_females==0 || num_males == 0 || num_matchmakers==0)
+                break;
+            pthread_cond_wait(&mating_start, &mating_lock);
+        }
+
+        if (need_male == 0 || need_female == 0 || need_matchmaker == 0)
         {
 
-        case MALE:
-            children_thread_id[i] = MALE;
-            pthread_create(&children_thread[i], NULL, male, (void *)&children_thread_id[i]);
-            break;
-
-        case FEMALE:
-            children_thread_id[i] = FEMALE;
-            pthread_create(&children_thread[i], NULL, female, (void *)&children_thread_id[i]);
-            break;
-
-        case MATCHMAKER:
-            children_thread_id[i] = MATCHMAKER;
-            pthread_create(&children_thread[i], NULL, matchmaker,(void *)&children_thread_id[i]);
+            sleep(5);
+            // tiger_stats();
             break;
         }
+
+        children_to_born = (rand() % (num_children)) + 1;
+
+        print_mating_begin(children_to_born);
+
+        children_thread = (pthread_t *)malloc(sizeof(pthread_t) * children_to_born);
+        children_thread_id = (int *)malloc(sizeof(int) * children_to_born);
+
+        for (i = 0; i < children_to_born; i++)
+        {
+
+            count_tiger++;
+            value = rand() % (3) + 0;
+            print_born(value);
+            switch (value)
+            {
+
+            case MALE:
+                num_males++;
+                children_thread_id[i] = MALE;
+                pthread_create(&children_thread[i], NULL, male, (void *)&children_thread_id[i]);
+                break;
+
+            case FEMALE:
+                num_females++;
+                children_thread_id[i] = FEMALE;
+                pthread_create(&children_thread[i], NULL, female, (void *)&children_thread_id[i]);
+                break;
+
+            case MATCHMAKER:
+                num_matchmakers++;
+                children_thread_id[i] = MATCHMAKER;
+                pthread_create(&children_thread[i], NULL, matchmaker, (void *)&children_thread_id[i]);
+                break;
+            }
+            if(count_tiger == num_tigers){
+                break;
+            }
+        }
+
+        count = 0;
+        //exiting areana starts here
+        num_females--;
+        num_males--;
+        num_matchmakers--;
+        pthread_cond_signal(&male_exit);
+        pthread_cond_signal(&female_exit);
+        pthread_cond_signal(&match_exit);
+        pthread_mutex_unlock(&mating_lock);
+        sleep(1);
     }
-
-    for (i = 0; i < children_to_born; i++)
-    {
-        pthread_join(children_thread[i], NULL);
-        if (children_thread_id[i] == 0 || children_thread_id[i] == 1)
-        {
-            print_tiger_leave(children_thread_id[i]);
-        }
-    }
-
-    num_males--;
-    num_females--;
-    num_matchmakers--;
-    free(children_thread_id);
-    free(children_thread);
-    mating_begin = 0;
 }
 int main(int argc, char *argv[])
 {
-    pthread_t *mating_thread;
-    int i, children_to_born = 1;
+    pthread_t mating_thread, *female_threads, *male_threads, *matchmaker_threads;
+    int i, children_to_born = 1, male_flag = 0, female_flag = 1;
     if (argc < 6)
     {
         printf("./tiger-sync #num_females #num_males #num_matchmakers #num_children #num_tigers e.g. ./exe 10 10 10 5 1000\n");
@@ -152,34 +195,46 @@ int main(int argc, char *argv[])
         num_matchmakers = atoi(argv[3]);
         num_children = atoi(argv[4]);
         num_tigers = atoi(argv[5]);
+        count_tiger = num_matchmakers + num_males + num_males;
     }
-    pthread_mutex_init(&male_mutex, NULL);
-    pthread_mutex_init(&female_mutex, NULL);
-    pthread_mutex_init(&matchmaker_mutex, NULL);
-    pthread_mutex_init(&mating_mutex, NULL);
-    pthread_cond_init(&mating_wait, NULL);
-    pthread_mutex_init(&born_mutex, NULL);
+    pthread_mutex_init(&mating_lock, NULL);
+    pthread_cond_init(&male_wait, NULL);
+    pthread_cond_init(&female_wait, NULL);
+    pthread_cond_init(&matchmaker_wait, NULL);
+    pthread_cond_init(&match_exit, NULL);
+    pthread_cond_init(&male_wait, NULL);
+    pthread_cond_init(&female_wait, NULL);
+    pthread_cond_init(&mating_start, NULL);
 
-    while (1)
+    female_threads = (pthread_t *)malloc(sizeof(pthread_t) * num_females);
+    male_threads = (pthread_t *)malloc(sizeof(pthread_t) * num_males);
+    matchmaker_threads = (pthread_t *)malloc(sizeof(pthread_t) * num_matchmakers);
+
+    for (i = 0; i < num_females; i++)
     {
-
-        pthread_mutex_lock(&mating_mutex);
-        while (num_females == 0 || num_males == 0 || num_matchmakers == 0 ||  mating_begin)
-        {
-            pthread_cond_wait(&mating_wait, &mating_mutex);
-        }
-        
-        children_to_born = (rand() % (num_children)) + 1;
-        mating_occur(children_to_born);
-        pthread_mutex_unlock(&mating_mutex);
-        sleep(1);
+        pthread_create(&female_threads[i], NULL, female, (void *)&female_flag);
     }
+    for (i = 0; i < num_males; i++)
+    {
+        pthread_create(&male_threads[i], NULL, male, (void *)&male_flag);
+    }
+    for (i = 0; i < num_matchmakers; i++)
+    {
+        pthread_create(&matchmaker_threads[i], NULL, matchmaker, NULL);
+    }
+    pthread_create(&mating_thread, NULL, mating_occur, NULL);
+    pthread_join(mating_thread, NULL);
 
-    pthread_mutex_destroy(&male_mutex);
-    pthread_mutex_destroy(&female_mutex);
-    pthread_mutex_destroy(&matchmaker_mutex);
-    pthread_mutex_destroy(&mating_mutex);
-    pthread_cond_destroy(&mating_wait);
-    pthread_mutex_destroy(&born_mutex);
+    pthread_mutex_destroy(&mating_lock);
+    pthread_cond_destroy(&male_wait);
+    pthread_cond_destroy(&female_wait);
+    pthread_cond_destroy(&matchmaker_wait);
+    pthread_cond_destroy(&match_exit);
+    pthread_cond_destroy(&male_wait);
+    pthread_cond_destroy(&female_wait);
+    pthread_cond_destroy(&mating_start);
+    free(female_threads);
+    free(male_threads);
+    free(matchmaker_threads);
     return 0;
 }

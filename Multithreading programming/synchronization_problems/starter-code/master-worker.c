@@ -39,6 +39,7 @@ void *generate_requests_loop(void *data)
     if (item_to_produce == total_items)
     {
       sem_post(&mutex);
+      sem_post(&empty);
       sem_post(&full);
       break;
     }

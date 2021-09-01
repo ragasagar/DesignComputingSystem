@@ -8,7 +8,7 @@
 #include <errno.h>
 #include <signal.h>
 
-int num_diners, max_capacity, in_count, out_count, customer_count=0;
+int num_diners, max_capacity, in_count, out_count, customer_count=0, out_customer=0;
 pthread_mutex_t enter_mutex, exit_mutex;
 pthread_cond_t in_cond, out_cond,rest_enter, rest_exit;
 void print_entered(int num)
@@ -45,7 +45,8 @@ void *diner_func(void *data)
   pthread_cond_wait(&out_cond, &exit_mutex);
   print_exited(thread_id);
   out_count++;
-  if (out_count == max_capacity || customer_count == num_diners)
+  out_customer++;
+  if (out_count == max_capacity || out_customer == num_diners)
   {
     out_count = 0;
     pthread_cond_signal(&rest_exit);
@@ -108,8 +109,6 @@ int main(int argc, char *argv[])
     }
     pthread_cond_wait(&rest_enter, &enter_mutex);
 
-    sleep(1);
-
     pthread_mutex_unlock(&enter_mutex);
     pthread_mutex_lock(&exit_mutex);
     if (out_count == 0)
@@ -122,7 +121,6 @@ int main(int argc, char *argv[])
     pthread_cond_wait(&rest_exit, &exit_mutex);
     pthread_mutex_unlock(&exit_mutex);
     
-    sleep(1);
     printf("\n");
   }
 
